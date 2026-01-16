@@ -137,7 +137,8 @@ async def publish_listing_from_draft(supabase: Client, user_id: str, draft: dict
         }).execute()
 
     try:
-        supabase.table("active_drafts").update({"state": "PUBLISHED", "updated_at": now_iso()}).eq("id", draft.get("id")).execute()
+        # Delete draft after publishing instead of just marking as published
+        supabase.table("active_drafts").delete().eq("id", draft.get("id")).execute()
     except Exception:
         pass
 

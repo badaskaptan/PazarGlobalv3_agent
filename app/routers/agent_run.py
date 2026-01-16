@@ -157,26 +157,80 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
             }
 
         if intent == "UNKNOWN" and _is_location_only(patch):
-            # If there is an active, recent draft missing location, treat this as draft completion
-            draft = get_or_create_draft(supabase, user_id)
-            missing = draft_missing_fields(draft)
-            if "location" not in missing or not _draft_recent(draft, 30):
-                results = search_listings(supabase, payload.message)
-                cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
-                response_text = (
-                    f"🔎 Şehir filtresi olarak algıladım. {payload.message} için bulabildiğim ilanlar aşağıda. "
-                    "İsterseniz bütçe veya kategori de söyleyin.\n\n"
-                    f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
-                )
+            # Check if there's an active recent draft that needs location
+            # BUT don't create a draft just for this check
+            if is_uuid(user_id):
+                try:
+                    existing = (
+                        supabase.table("active_drafts")
+                        .select("*")
+                        .eq("user_id", user_id)
+                        .order("updated_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    rows = (existing.data or []) if hasattr(existing, "data") else []
+                    if rows:
+                        draft = rows[0]
+                        missing = draft_missing_fields(draft)
+                        # Only use draft if it's recent AND needs location
+                        if "location" in missing and _draft_recent(draft, 30):
+                            # This is a draft completion, continue to normal flow
+                            pass
+                        else:
+                            # This is a search query, not draft completion
+                            results = search_listings(supabase, payload.message)
+                            cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
+                            response_text = (
+                                f"🔎 Şehir filtresi olarak algıladım. {payload.message} için bulabildiğim ilanlar aşağıda. "
+                                "İsterseniz bütçe veya kategori de söyleyin.\n\n"
+                                f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
+                            )
 
-                append_audit(supabase, user_id, phone, "search_location_only", payload.model_dump(), 200)
-                return {
-                    "success": True,
-                    "intent": "search_completed",
-                    "confidence": confidence,
-                    "response": response_text,
-                    "data": {"listings": results},
-                }
+                            append_audit(supabase, user_id, phone, "search_location_only", payload.model_dump(), 200)
+                            return {
+                                "success": True,
+                                "intent": "search_completed",
+                                "confidence": confidence,
+                                "response": response_text,
+                                "data": {"listings": results},
+                            }
+                    else:
+                        # No draft exists, this is definitely a search
+                        results = search_listings(supabase, payload.message)
+                        cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
+                        response_text = (
+                            f"🔎 Şehir filtresi olarak algıladım. {payload.message} için bulabildiğim ilanlar aşağıda. "
+                            "İsterseniz bütçe veya kategori de söyleyin.\n\n"
+                            f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
+                        )
+
+                        append_audit(supabase, user_id, phone, "search_location_only", payload.model_dump(), 200)
+                        return {
+                            "success": True,
+                            "intent": "search_completed",
+                            "confidence": confidence,
+                            "response": response_text,
+                            "data": {"listings": results},
+                        }
+                except Exception:
+                    # Error checking draft, treat as search
+                    results = search_listings(supabase, payload.message)
+                    cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
+                    response_text = (
+                        f"🔎 Şehir filtresi olarak algıladım. {payload.message} için bulabildiğim ilanlar aşağıda. "
+                        "İsterseniz bütçe veya kategori de söyleyin.\n\n"
+                        f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
+                    )
+
+                    append_audit(supabase, user_id, phone, "search_location_only", payload.model_dump(), 200)
+                    return {
+                        "success": True,
+                        "intent": "search_completed",
+                        "confidence": confidence,
+                        "response": response_text,
+                        "data": {"listings": results},
+                    }
 
         if intent == "UNKNOWN" and patch:
             has_title_or_category = any(k in patch for k in ["title", "category"])
@@ -325,12 +379,12 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
     if intent == "CANCEL":
         if is_uuid(user_id):
             try:
-                draft = get_or_create_draft(supabase, user_id)
-                supabase.table("active_drafts").update({"state": "CANCELLED", "updated_at": now_iso()}).eq("id", draft.get("id")).execute()
+                # Delete draft instead of just marking as cancelled
+                supabase.table("active_drafts").delete().eq("user_id", user_id).execute()
             except Exception:
                 pass
         append_audit(supabase, user_id, phone, "cancel", payload.model_dump(), 200)
-        return {"success": True, "intent": "completion_cancelled", "response": "✅ İşlem iptal edildi."}
+        return {"success": True, "intent": "completion_cancelled", "response": "✅ İşlem iptal edildi. Yeni bir işlem için mesaj gönderebilirsiniz."}
 
     if OPENAI_API_KEY:
         try:
