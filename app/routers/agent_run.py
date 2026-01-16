@@ -253,6 +253,37 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
                     "data": {"listings": results},
                 }
 
+        # ⭐ KRİTİK FIX: Yeni ilan bilgisi geldiğinde eski draft'ı temizle
+        # "kırmızı kazak" gibi yeni bir ilan yazdığında, eski "seagate harddisk" draft'ını silmeli
+        if intent in ["CREATE_LISTING", "UNKNOWN"] and patch:
+            # Eğer patch'te title, price veya category gibi yeni ilan başlangıç bilgisi varsa
+            has_new_listing_info = any(k in patch for k in ["title", "price", "category"])
+            
+            if has_new_listing_info:
+                # Varolan draft'ı kontrol et
+                try:
+                    existing = (
+                        supabase.table("active_drafts")
+                        .select("*")
+                        .eq("user_id", user_id)
+                        .order("updated_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    rows = (existing.data or []) if hasattr(existing, "data") else []
+                    
+                    if rows:
+                        old_draft = rows[0]
+                        old_listing_data = old_draft.get("listing_data") if isinstance(old_draft.get("listing_data"), dict) else {}
+                        old_title = old_listing_data.get("title") or ""
+                        new_title = patch.get("title") or ""
+                        
+                        # Eğer yeni title farklıysa (yeni ilan!), eski draft'ı sil
+                        if new_title and old_title and new_title.lower() != old_title.lower():
+                            supabase.table("active_drafts").delete().eq("user_id", user_id).execute()
+                except Exception:
+                    pass  # Ignore errors
+
         draft = get_or_create_draft(supabase, user_id)
 
         media_urls = payload.media_paths or []

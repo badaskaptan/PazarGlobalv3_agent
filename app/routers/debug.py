@@ -51,12 +51,26 @@ async def test_search(query: str = "samsung") -> dict[str, Any]:
     supabase = get_supabase()
     
     try:
+        # Test search
         results = search_listings(supabase, query, limit=10)
+        
+        # Also check what statuses exist in DB
+        all_statuses = supabase.table("listings").select("status").execute()
+        status_list: list[str] = []
+        if all_statuses.data:
+            for r in all_statuses.data:
+                if isinstance(r, dict) and "status" in r:
+                    val = r["status"]
+                    if isinstance(val, str):
+                        status_list.append(val)
+        status_list = list(set(status_list))
+        
         return {
             "success": True,
             "query": query,
             "count": len(results),
-            "results": results
+            "results": results,
+            "available_statuses": status_list
         }
     except Exception as e:
         return {

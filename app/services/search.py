@@ -9,7 +9,19 @@ from supabase import Client
 def search_listings(supabase: Client, query: str, limit: int = 6) -> list[dict[str, Any]]:
     q = (query or "").strip()
     if not q:
-        return []
+        # No query? Return recent listings
+        try:
+            res = (
+                supabase.table("listings")
+                .select("id,title,price,location,category,condition,images,created_at")
+                .eq("status", "active")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return res.data or []
+        except Exception:
+            return []
 
     # Extract price range if exists
     price_min, price_max = _extract_price_range(q)
@@ -19,7 +31,19 @@ def search_listings(supabase: Client, query: str, limit: int = 6) -> list[dict[s
 
     keywords = [k for k in re.split(r"\s+", q) if k][:4]
     if not keywords:
-        return []
+        # No keywords? Return recent listings
+        try:
+            res = (
+                supabase.table("listings")
+                .select("id,title,price,location,category,condition,images,created_at")
+                .eq("status", "active")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return res.data or []
+        except Exception:
+            return []
 
     ors: list[str] = []
     meta_ors: list[str] = []
@@ -51,8 +75,33 @@ def search_listings(supabase: Client, query: str, limit: int = 6) -> list[dict[s
 
     try:
         res = _run(",".join([*ors, *meta_ors]))
+        # If no results, try without metadata search
+        if not res.data:
+            res = _run(",".join(ors))
+        # If still no results, return recent listings as fallback
+        if not res.data:
+            res = (
+                supabase.table("listings")
+                .select("id,title,price,location,category,condition,images,created_at")
+                .eq("status", "active")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
     except Exception:
-        res = _run(",".join(ors))
+        try:
+            res = _run(",".join(ors))
+            if not res.data:
+                res = (
+                    supabase.table("listings")
+                    .select("id,title,price,location,category,condition,images,created_at")
+                    .eq("status", "active")
+                    .order("created_at", desc=True)
+                    .limit(limit)
+                    .execute()
+                )
+        except Exception:
+            return []
     return res.data or []
 
 
