@@ -17,6 +17,7 @@ from app.config import (
 from app.core.helpers import now_iso
 from app.routers.agent_run import router as agent_router
 from app.routers.webchat import router as webchat_router
+from app.routers.debug import router as debug_router
 
 # Prioritize local package resolution when running via `uvicorn agent.main:app`.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
 
     app.include_router(webchat_router)
     app.include_router(agent_router)
+    app.include_router(debug_router)
 
     return app
 
