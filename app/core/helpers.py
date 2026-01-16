@@ -67,25 +67,33 @@ def detect_intent(message: str) -> Tuple[str, float]:
     if any(k in msg for k in ["onaylıyorum", "yayınla", "yayınlayalım", "paylaş", "publish"]):
         return "COMMIT_REQUEST", 0.9
 
-    if any(k in msg for k in [
-        "ara",
-        "bul",
-        "listele",
-        "ilanları",
-        "var mı",
-        "varmi",
-        "arıyorum",
-        "aramak",
-        "aranır",
-        "bulabilir",
-        "fiyat araştır",
-        "fiyat bak",
-    ]):
-        return "SEARCH_LISTING", 0.75
+    # SEARCH intent - güçlendirilmiş pattern matching
+    search_verbs = ["ara", "bul", "listele", "göster", "aranır", "bulabilir", "lazım", "istiyorum"]
+    search_markers = ["arıyorum", "aramak", "var mı", "varmi", "ilanları", "ilanlar"]
+    search_confidence = 0.0
+    
+    for verb in search_verbs:
+        if verb in msg:
+            search_confidence = max(search_confidence, 0.75)
+            break
+    
+    for marker in search_markers:
+        if marker in msg:
+            search_confidence = max(search_confidence, 0.8)
+            break
+    
+    # "fiyat araştır" patterns
+    if any(k in msg for k in ["fiyat araştır", "fiyat bak", "ne kadar", "piyasa fiyatı"]):
+        return "SEARCH_LISTING", 0.85
+    
+    if search_confidence > 0.0:
+        return "SEARCH_LISTING", search_confidence
 
+    # CREATE intent
     if any(k in msg for k in ["sat", "satılık", "ilan ver", "ilan oluştur", "yayına", "ürün sat"]):
         return "CREATE_LISTING", 0.8
 
+    # AMBIGUOUS - price + location but no clear verb
     if _looks_like_listing_packet(msg):
         return "AMBIGUOUS", 0.55
 

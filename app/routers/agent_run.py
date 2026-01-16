@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -107,9 +108,12 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
             summary_bits.append(str(patch.get("location")))
         summary = " · ".join(summary_bits)
 
+        # ⭐ REFERANS DOKÜMANI: Belirsiz niyet için kullanıcıya soru sor
         response_text = (
-            (f"Anladım: {summary}. " if summary else "Anladım. ")
-            + "Bununla ilan mı yayınlamak istiyorsunuz, yoksa benzer ilanları mı arayayım?"
+            (f"Anladım: {summary}.\n\n" if summary else "")
+            + "🤔 Bununla ne yapmak istersiniz?\n\n"
+            + "1️⃣ İlan vermek istiyorsanız → 'ilan ver' veya 'yayınla' yazın\n"
+            + "2️⃣ Benzer ilanları aramak istiyorsanız → 'ara' veya 'bul' yazın"
         )
 
         append_audit(supabase, user_id, phone, "intent_clarify", payload.model_dump(), 200)
@@ -127,6 +131,21 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
 
         patch = extract_simple_fields(payload.message)
 
+        def _draft_recent(draft_row: dict[str, Any], minutes: int = 30) -> bool:
+            updated_at = draft_row.get("updated_at") or draft_row.get("created_at")
+            if not isinstance(updated_at, str):
+                return False
+            try:
+                dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            except Exception:
+                return False
+            now = datetime.now(timezone.utc)
+            return now - dt <= timedelta(minutes=minutes)
+
+        def _is_location_only(p: dict[str, Any]) -> bool:
+            keys = set(p.keys())
+            return keys == {"location"}
+
         # If message doesn't look like listing info, respond with a gentle prompt
         if intent == "UNKNOWN" and not patch:
             append_audit(supabase, user_id, phone, "unknown_no_listing", payload.model_dump(), 200)
@@ -136,6 +155,49 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
                 "confidence": confidence,
                 "response": "Size nasıl yardımcı olabilirim? İlan vermek istiyorsanız ürün bilgilerini, ilan aramak istiyorsanız aradığınız ürünü yazabilirsiniz.",
             }
+
+        if intent == "UNKNOWN" and _is_location_only(patch):
+            # If there is an active, recent draft missing location, treat this as draft completion
+            draft = get_or_create_draft(supabase, user_id)
+            missing = draft_missing_fields(draft)
+            if "location" not in missing or not _draft_recent(draft, 30):
+                results = search_listings(supabase, payload.message)
+                cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
+                response_text = (
+                    f"🔎 Şehir filtresi olarak algıladım. {payload.message} için bulabildiğim ilanlar aşağıda. "
+                    "İsterseniz bütçe veya kategori de söyleyin.\n\n"
+                    f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
+                )
+
+                append_audit(supabase, user_id, phone, "search_location_only", payload.model_dump(), 200)
+                return {
+                    "success": True,
+                    "intent": "search_completed",
+                    "confidence": confidence,
+                    "response": response_text,
+                    "data": {"listings": results},
+                }
+
+        if intent == "UNKNOWN" and patch:
+            has_title_or_category = any(k in patch for k in ["title", "category"])
+            has_price_or_location = any(k in patch for k in ["price", "location"])
+            if has_title_or_category and not has_price_or_location:
+                results = search_listings(supabase, payload.message)
+                cache: dict[str, Any] = {"results": results, "query": payload.message, "ts": now_iso()}
+                response_text = (
+                    "🔎 Bunu arama talebi olarak algıladım. Bulabildiğim ilanlar aşağıda. "
+                    "İsterseniz şehir, bütçe veya kategori de söyleyin.\n\n"
+                    f"[SEARCH_CACHE]{json.dumps(cache, ensure_ascii=False)}"
+                )
+
+                append_audit(supabase, user_id, phone, "search_query_unknown", payload.model_dump(), 200)
+                return {
+                    "success": True,
+                    "intent": "search_completed",
+                    "confidence": confidence,
+                    "response": response_text,
+                    "data": {"listings": results},
+                }
 
         draft = get_or_create_draft(supabase, user_id)
 
