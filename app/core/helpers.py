@@ -53,9 +53,13 @@ def detect_intent(message: str) -> Tuple[str, float]:
         return "UNKNOWN", 0.0
 
     greeting_tokens = ["selam", "merhaba", "hey", "sa", "selamlar", "günaydın", "iyi akşamlar", "iyi günler"]
+    smalltalk_tokens = ["nasılsın", "naber", "ne haber", "hayat nasıl", "nasıl gidiyor", "iyisin", "iyi misin"]
     if any(k == msg or msg.startswith(f"{k} ") for k in greeting_tokens):
         if len(msg.split()) <= 2 and extract_price_try(msg) is None:
             return "SMALL_TALK", 0.9
+    if any(k in msg for k in smalltalk_tokens):
+        if extract_price_try(msg) is None:
+            return "SMALL_TALK", 0.85
 
     if any(k in msg for k in ["iptal", "vazgeç", "kapat", "cancel", "stop"]):
         return "CANCEL", 0.95

@@ -73,7 +73,7 @@ def get_or_create_draft(supabase: Client, user_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], rows[0])
 
     created = supabase.table("active_drafts").insert(
-        {"user_id": user_id, "state": "DISCOVERY_MODE", "listing_data": {}, "images": {}}
+        {"user_id": user_id, "state": "DISCOVERY_MODE", "listing_data": {}, "images": []}
     ).execute()
 
     created_rows = (created.data or []) if hasattr(created, "data") else []
@@ -129,17 +129,20 @@ def store_media_urls(supabase: Client, draft_id: str, media_urls: list[str]) -> 
     if not rows:
         raise RuntimeError("Draft bulunamadı")
 
-    images = _ensure_dict(cast(dict[str, Any], rows[0]).get("images"))
-
+    images_raw = cast(dict[str, Any], rows[0]).get("images")
     existing_urls: list[str] = []
-    urls_raw = images.get("urls")
-    if isinstance(urls_raw, list):
-        existing_urls = cast(list[str], urls_raw)
+    if isinstance(images_raw, list):
+        existing_urls = cast(list[str], images_raw)
+    else:
+        images_dict = _ensure_dict(images_raw)
+        urls_raw = images_dict.get("urls")
+        if isinstance(urls_raw, list):
+            existing_urls = cast(list[str], urls_raw)
 
     merged: list[str] = list(dict.fromkeys([*existing_urls, *[u for u in media_urls if u]]))
-    images["urls"] = merged
 
-    supabase.table("active_drafts").update({"images": images, "updated_at": now_iso()}).eq(
+    # Always store as array to satisfy schemas expecting JSON array
+    supabase.table("active_drafts").update({"images": merged, "updated_at": now_iso()}).eq(
         "id", draft_id
     ).execute()
 

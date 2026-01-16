@@ -31,7 +31,7 @@ def extract_simple_fields(message: str) -> dict[str, Any]:
     if cat:
         patch["category"] = cat
 
-    if len(msg) >= 4 and not any(k in msg.lower() for k in ["ara", "bul", "listele", "onaylıyorum", "yayınla", "iptal"]):
+    if len(msg) >= 4 and not any(k in msg.lower() for k in ["ara", "bul", "listele", "onaylıyorum", "yayınla", "iptal", "naber", "nasılsın", "nasıl gidiyor"]):
         if not re.fullmatch(r"\d{2,7}", msg.strip()):
             clean_title = msg
             if p is not None:
@@ -39,6 +39,8 @@ def extract_simple_fields(message: str) -> dict[str, Any]:
             if loc:
                 clean_title = re.sub(rf"\b{re.escape(loc)}\b", "", clean_title, flags=re.IGNORECASE)
             clean_title = re.sub(r"\s+", " ", clean_title).strip()
+            if "?" in clean_title:
+                clean_title = ""
             if len(clean_title) >= 3 and not re.fullmatch(r"\d{2,7}", clean_title):
                 patch.setdefault("title", clean_title[:80])
 

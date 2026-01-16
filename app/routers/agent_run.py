@@ -125,9 +125,19 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
         if not is_uuid(user_id):
             raise HTTPException(status_code=400, detail="user_id uuid olmalı")
 
-        draft = get_or_create_draft(supabase, user_id)
-
         patch = extract_simple_fields(payload.message)
+
+        # If message doesn't look like listing info, respond with a gentle prompt
+        if intent == "UNKNOWN" and not patch:
+            append_audit(supabase, user_id, phone, "unknown_no_listing", payload.model_dump(), 200)
+            return {
+                "success": True,
+                "intent": "unknown",
+                "confidence": confidence,
+                "response": "Size nasıl yardımcı olabilirim? İlan vermek istiyorsanız ürün bilgilerini, ilan aramak istiyorsanız aradığınız ürünü yazabilirsiniz.",
+            }
+
+        draft = get_or_create_draft(supabase, user_id)
 
         media_urls = payload.media_paths or []
         if media_urls:
