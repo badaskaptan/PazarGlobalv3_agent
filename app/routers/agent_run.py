@@ -146,6 +146,12 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
             keys = set(p.keys())
             return keys == {"location"}
 
+        # ⭐ YENİ: CREATE_LISTING intent + boş patch → "ilan ver" gibi continuation
+        # Mevcut draft'a devam et, yeni oluşturma
+        if intent == "CREATE_LISTING" and not patch:
+            # Direkt eksik alanları sormaya geç (mevcut draft var mı kontrol et)
+            pass  # Continue to draft flow
+
         # If message doesn't look like listing info, respond with a gentle prompt
         if intent == "UNKNOWN" and not patch:
             append_audit(supabase, user_id, phone, "unknown_no_listing", payload.model_dump(), 200)
@@ -253,36 +259,47 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
                     "data": {"listings": results},
                 }
 
-        # ⭐ KRİTİK FIX: Yeni ilan bilgisi geldiğinde eski draft'ı temizle
-        # "kırmızı kazak" gibi yeni bir ilan yazdığında, eski "seagate harddisk" draft'ını silmeli
+        # ⭐ YENİ MANTIK: Eski draft'ı sadece şu durumlarda sil:
+        # 1. Eski draft TAMAMLANMIŞ (eksik alan yok)
+        # 2. VE yeni bir ilan bilgisi (title+price gibi) gelmiş
+        # Aksi halde mevcut draft'a DEVAM ET
+        should_clear_old_draft = False
+        
         if intent in ["CREATE_LISTING", "UNKNOWN"] and patch:
-            # Eğer patch'te title, price veya category gibi yeni ilan başlangıç bilgisi varsa
-            has_new_listing_info = any(k in patch for k in ["title", "price", "category"])
-            
-            if has_new_listing_info:
-                # Varolan draft'ı kontrol et
-                try:
-                    existing = (
-                        supabase.table("active_drafts")
-                        .select("*")
-                        .eq("user_id", user_id)
-                        .order("updated_at", desc=True)
-                        .limit(1)
-                        .execute()
-                    )
-                    rows = (existing.data or []) if hasattr(existing, "data") else []
+            try:
+                existing = (
+                    supabase.table("active_drafts")
+                    .select("*")
+                    .eq("user_id", user_id)
+                    .order("updated_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                rows = (existing.data or []) if hasattr(existing, "data") else []
+                
+                if rows:
+                    old_draft = rows[0]
+                    missing_fields = draft_missing_fields(old_draft)
                     
-                    if rows:
-                        old_draft = rows[0]
-                        old_listing_data = old_draft.get("listing_data") if isinstance(old_draft.get("listing_data"), dict) else {}
-                        old_title = old_listing_data.get("title") or ""
-                        new_title = patch.get("title") or ""
-                        
-                        # Eğer yeni title farklıysa (yeni ilan!), eski draft'ı sil
-                        if new_title and old_title and new_title.lower() != old_title.lower():
-                            supabase.table("active_drafts").delete().eq("user_id", user_id).execute()
-                except Exception:
-                    pass  # Ignore errors
+                    # Eski draft tamamlanmışsa VE yeni tam bilgi (title+price) geliyorsa → yeni ilan başlatıyoruz
+                    if not missing_fields:  # Draft tamamlanmış
+                        has_title_and_price = "title" in patch and "price" in patch
+                        if has_title_and_price:
+                            old_listing_data = old_draft.get("listing_data") if isinstance(old_draft.get("listing_data"), dict) else {}
+                            old_title = old_listing_data.get("title") or ""
+                            new_title = patch.get("title") or ""
+                            
+                            # Farklı ürün adı → yeni ilan
+                            if new_title and old_title and new_title.lower() != old_title.lower():
+                                should_clear_old_draft = True
+            except Exception:
+                pass
+        
+        if should_clear_old_draft:
+            try:
+                supabase.table("active_drafts").delete().eq("user_id", user_id).execute()
+            except Exception:
+                pass
 
         draft = get_or_create_draft(supabase, user_id)
 
