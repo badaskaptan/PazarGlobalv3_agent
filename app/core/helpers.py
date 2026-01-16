@@ -68,8 +68,8 @@ def detect_intent(message: str) -> Tuple[str, float]:
         return "COMMIT_REQUEST", 0.9
 
     # SEARCH intent - güçlendirilmiş pattern matching
-    search_verbs = ["ara", "bul", "listele", "göster", "aranır", "bulabilir", "lazım", "istiyorum"]
-    search_markers = ["arıyorum", "aramak", "var mı", "varmi", "ilanları", "ilanlar"]
+    search_verbs = ["ara", "bul", "listele", "göster", "aranır", "bulabilir", "lazım", "istiyorum", "bakmak"]
+    search_markers = ["arıyorum", "aramak", "var mı", "varmı", "var mi", "varmi", "ilanları", "ilanlar", "ilanlara"]
     search_confidence = 0.0
     
     for verb in search_verbs:

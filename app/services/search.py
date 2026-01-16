@@ -96,15 +96,19 @@ def _parse_number(s: str) -> float | None:
 
 
 def _extract_location_hint(query: str) -> str | None:
-    """Extract location from query"""
+    """Extract location from query - sadece bilinen şehirler için"""
     q = query.lower()
-    # Common Turkish cities
+    # Common Turkish cities - word boundary ile tam eşleşme
     cities = [
         "istanbul", "ankara", "izmir", "bursa", "antalya", "adana", "konya",
         "gaziantep", "şanlıurfa", "kocaeli", "mersin", "diyarbakır", "kayseri",
-        "eskişehir", "izmit", "trabzon", "balıkesir", "malatya", "erzurum"
+        "eskişehir", "izmit", "trabzon", "balıkesir", "malatya", "erzurum",
+        "samsun", "denizli", "sakarya", "manisa", "van", "batman", "elazığ",
+        "erzincan", "sivas", "tekirdağ", "çorum", "ordu", "afyon", "aydın"
     ]
+    # Sadece tam kelime eşleşmesi (samsung gibi yanlış eşleşmeleri engelle)
+    words = q.split()
     for city in cities:
-        if city in q:
+        if city in words:
             return city
     return None
