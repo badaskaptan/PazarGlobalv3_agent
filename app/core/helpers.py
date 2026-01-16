@@ -52,8 +52,10 @@ def detect_intent(message: str) -> Tuple[str, float]:
     if not msg:
         return "UNKNOWN", 0.0
 
-    if any(k in msg for k in ["selam", "merhaba", "hey", "sa", "selamlar", "günaydın", "iyi akşamlar", "iyi günler"]):
-        return "SMALL_TALK", 0.9
+    greeting_tokens = ["selam", "merhaba", "hey", "sa", "selamlar", "günaydın", "iyi akşamlar", "iyi günler"]
+    if any(k == msg or msg.startswith(f"{k} ") for k in greeting_tokens):
+        if len(msg.split()) <= 2 and extract_price_try(msg) is None:
+            return "SMALL_TALK", 0.9
 
     if any(k in msg for k in ["iptal", "vazgeç", "kapat", "cancel", "stop"]):
         return "CANCEL", 0.95
@@ -61,7 +63,20 @@ def detect_intent(message: str) -> Tuple[str, float]:
     if any(k in msg for k in ["onaylıyorum", "yayınla", "yayınlayalım", "paylaş", "publish"]):
         return "COMMIT_REQUEST", 0.9
 
-    if any(k in msg for k in ["ara", "bul", "listele", "ilanları", "var mı", "fiyat araştır", "fiyat bak"]):
+    if any(k in msg for k in [
+        "ara",
+        "bul",
+        "listele",
+        "ilanları",
+        "var mı",
+        "varmi",
+        "arıyorum",
+        "aramak",
+        "aranır",
+        "bulabilir",
+        "fiyat araştır",
+        "fiyat bak",
+    ]):
         return "SEARCH_LISTING", 0.75
 
     if any(k in msg for k in ["sat", "satılık", "ilan ver", "ilan oluştur", "yayına", "ürün sat"]):

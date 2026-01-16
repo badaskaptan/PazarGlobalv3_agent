@@ -21,7 +21,8 @@ def extract_simple_fields(message: str) -> dict[str, Any]:
     if mloc:
         candidate = mloc.group(1).strip()
         candidate_lc = candidate.lower()
-        if len(candidate.split()) <= 3 and candidate_lc not in ["tl", "try", "lira", "türk lirası", "turk lirasi"]:
+        blocked_location = ["tl", "try", "lira", "türk lirası", "turk lirasi", "arıyorum", "aramak", "var mı", "varmi"]
+        if len(candidate.split()) <= 3 and not any(b in candidate_lc for b in blocked_location):
             loc = candidate
     if loc:
         patch["location"] = loc
