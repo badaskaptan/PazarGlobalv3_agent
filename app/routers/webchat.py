@@ -22,6 +22,14 @@ def webchat_categories() -> dict[str, Any]:
 
 @router.post("/webchat/message")
 async def webchat_message(payload: WebchatMessageRequest, request: Request) -> dict[str, Any]:
+    merged_context: dict[str, Any] = {"session": {"source": "webchat"}}
+    if isinstance(payload.user_context, dict):
+        ctx_session = payload.user_context.get("session") if isinstance(payload.user_context.get("session"), dict) else {}
+        merged_context = {
+            **payload.user_context,
+            "session": {**ctx_session, "source": "webchat"},
+        }
+
     run_payload = AgentRunRequest(
         user_id=payload.user_id,
         phone=None,
@@ -31,7 +39,7 @@ async def webchat_message(payload: WebchatMessageRequest, request: Request) -> d
         media_type="image" if (payload.media_url or (payload.media_urls and len(payload.media_urls) > 0)) else None,
         draft_listing_id=None,
         session_token=None,
-        user_context={"session": {"source": "webchat"}},
+        user_context=merged_context,
     )
 
     return await handle_agent_run(run_payload, request)

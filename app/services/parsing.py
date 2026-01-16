@@ -20,7 +20,8 @@ def extract_simple_fields(message: str) -> dict[str, Any]:
     mloc = re.search(r"(?:konum\s*:\s*)?([A-Za-zÇĞİÖŞÜçğıöşü\s]{3,20})$", msg)
     if mloc:
         candidate = mloc.group(1).strip()
-        if len(candidate.split()) <= 3:
+        candidate_lc = candidate.lower()
+        if len(candidate.split()) <= 3 and candidate_lc not in ["tl", "try", "lira", "türk lirası", "turk lirasi"]:
             loc = candidate
     if loc:
         patch["location"] = loc

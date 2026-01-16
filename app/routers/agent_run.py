@@ -25,8 +25,44 @@ async def handle_agent_run(payload: AgentRunRequest, request: Request) -> dict[s
 
     user_id = payload.user_id
     phone = normalize_phone(payload.phone)
+    if not phone and is_uuid(user_id):
+        try:
+            profile_res = supabase.table("profiles").select("phone").eq("id", user_id).limit(1).execute()
+            rows = (profile_res.data or []) if hasattr(profile_res, "data") else []
+            if rows and isinstance(rows[0], dict):
+                phone = normalize_phone(rows[0].get("phone"))
+        except Exception:
+            phone = None
 
     intent, confidence = detect_intent(payload.message)
+
+    if intent == "SMALL_TALK":
+        display_name: str | None = None
+        if isinstance(payload.user_context, dict):
+            display_name = payload.user_context.get("display_name") or payload.user_context.get("full_name") or payload.user_context.get("name")
+
+        if not display_name and is_uuid(user_id):
+            try:
+                profile_res = supabase.table("profiles").select("display_name,full_name").eq("id", user_id).limit(1).execute()
+                rows = (profile_res.data or []) if hasattr(profile_res, "data") else []
+                if rows and isinstance(rows[0], dict):
+                    display_name = rows[0].get("display_name") or rows[0].get("full_name")
+            except Exception:
+                display_name = None
+
+        if isinstance(display_name, str):
+            display_name = display_name.strip()
+        if not display_name:
+            response_text = "Selam! PazarGlobal'e hoş geldiniz. Size nasıl yardımcı olabilirim? İlan vermek ya da ilan aramak için yazabilirsiniz."
+        else:
+            response_text = f"Selam {display_name}! PazarGlobal'e hoş geldiniz. Size nasıl yardımcı olabilirim? İlan vermek ya da ilan aramak için yazabilirsiniz."
+        append_audit(supabase, user_id, phone, "small_talk", payload.model_dump(), 200)
+        return {
+            "success": True,
+            "intent": "small_talk",
+            "confidence": confidence,
+            "response": response_text,
+        }
 
     if intent == "SEARCH_LISTING":
         results = search_listings(supabase, payload.message)

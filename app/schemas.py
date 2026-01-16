@@ -23,6 +23,7 @@ class WebchatMessageRequest(BaseModel):
     message: str
     media_url: str | None = None
     media_urls: list[str] | None = None
+    user_context: dict[str, Any] | None = None
 
 
 class WebchatMediaAnalyzeRequest(BaseModel):

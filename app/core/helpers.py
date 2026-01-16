@@ -52,6 +52,9 @@ def detect_intent(message: str) -> Tuple[str, float]:
     if not msg:
         return "UNKNOWN", 0.0
 
+    if any(k in msg for k in ["selam", "merhaba", "hey", "sa", "selamlar", "günaydın", "iyi akşamlar", "iyi günler"]):
+        return "SMALL_TALK", 0.9
+
     if any(k in msg for k in ["iptal", "vazgeç", "kapat", "cancel", "stop"]):
         return "CANCEL", 0.95
 
